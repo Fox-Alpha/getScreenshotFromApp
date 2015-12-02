@@ -298,21 +298,18 @@ namespace getScreenShot
 		#region Events
 		void button1_Click(object sender, EventArgs e)
 		{
-			IntPtr handle = IntPtr.Zero;
-			
 			Process[] prz = Process.GetProcessesByName("JM4");
-			string FileNameToSaveFmt = @"c:\temp\captures\capturetest_%NOW%_{0}.png", FileNameToSave;
 			
 			if (prz.Length > 0) {
-				foreach (Process ps in prz) {
-					handle = ps.MainWindowHandle;
-					
-					if (handle != null) {
-						
-						SetForegroundWindow(handle);
+				foreach (Process ps in prz) 
+				{
+					if (ps.MainWindowHandle != null) 
+					{	
+						SetForegroundWindow(ps.MainWindowHandle);
 						Thread.Sleep(300);
 						
-						ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName), handle, ImageFormat.Png);
+						ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName), ps.MainWindowHandle, ImageFormat.Png);
+						
 						saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName,1));
 					}
 				}
@@ -321,8 +318,7 @@ namespace getScreenShot
 		
 		void saveProcessInfo2File(Process ps, string fileName)
 		{
-			fileName = fileName.Replace("%NOW%", DateTime.Now.ToString("yyyy-MM-dd@hh.mm.ss"));
-			File.WriteAllText(fileName+".log",string.Format("Prozess ID: {0}\r\n" +
+			File.WriteAllText(fileName,string.Format("Prozess ID: {0}\r\n" +
 				              "Fenstertitel: {1}\r\n" +
 				              "Prozess Startzeit: {2}\r\n" +
 				              "Prozess CPU Zeit: {3}\r\n" +
