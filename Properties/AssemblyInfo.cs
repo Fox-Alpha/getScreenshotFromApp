@@ -10,9 +10,9 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("getScreenShot")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Einfaches erstellen von Screenshot von Anwendungen per Kommandozeilen Optionen")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Buck-Software")]
 [assembly: AssemblyProduct("getScreenShot")]
 [assembly: AssemblyCopyright("Copyright 2015")]
 [assembly: AssemblyTrademark("")]
@@ -28,4 +28,4 @@ using System.Runtime.InteropServices;
 //
 // You can specify all the values or you can use the default the Revision and 
 // Build Numbers by using the '*' as shown below:
-[assembly: AssemblyVersion("1.0.*")]
+[assembly: AssemblyVersion("1.0.0.0")]
