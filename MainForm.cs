@@ -26,8 +26,35 @@ namespace getScreenShot
 	/// </summary>
 	public partial class MainForm : Form
 	{
+		private const int ALT = 0xA4;
+		private const int EXTENDEDKEY = 0x1;
+		private const int KEYUP = 0x2;
+		private const uint Restore = 9;
+		
 		[DllImport("user32.dll")]
-		static extern bool SetForegroundWindow(IntPtr hWnd);	
+		private static extern bool SetForegroundWindow(IntPtr hWnd);
+		
+		[DllImport("user32.dll")]
+		private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+		
+		[DllImport("user32.dll")]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool IsIconic(IntPtr hWnd);
+		
+		[DllImport("user32.dll")]
+		private static extern int ShowWindow(IntPtr hWnd, uint Msg);
+		
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetForegroundWindow();		
+
+		[DllImport("user32.dll", SetLastError=true)]
+		static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+		[DllImport("user32.dll", SetLastError=true)]
+		static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+		
+		[DllImport("user32.dll", SetLastError=true)]
+		static extern IntPtr SetActiveWindow(IntPtr hWnd);
 
 		#region Properties
         //	Rückgabewerte für Nagios
@@ -48,7 +75,9 @@ namespace getScreenShot
 		{
 			NONE = 0,
 			APP,
-			FULL
+			FULL,
+			GUI,
+			NoGUI
 		}
 
 		int status = (int) nagiosStatus.Ok;
@@ -67,6 +96,15 @@ namespace getScreenShot
 		string captureFileLogExt = "log";
 		string captureImageExt = "png";
 		
+		
+		string _cmdProcess;
+		public string cmdProcess
+        {
+			get { return _cmdProcess; }
+			set { _cmdProcess = value; }
+		}
+		
+		
 		#endregion
 		
 		#region FormFunktions
@@ -78,25 +116,41 @@ namespace getScreenShot
 			InitializeComponent();
 			
 			dicCmdArgs = new Dictionary<string, string>();
-			
+			modeType = cmdActionArgsModeType.NONE;			
 			
 			string strMode;
+			string strProcess;
 			
 			//
 			//	Übergebene Kommandozeilen Parameter ermitteln
 			//
 			
-			check_cmdLineArgs();
-			
-			dicCmdArgs.TryGetValue("equals", out strMode);
-			
-			check_modeParameters(strMode);
-			
+			if(check_cmdLineArgs())
+			{			
+				dicCmdArgs.TryGetValue("mode", out strMode);
+				dicCmdArgs.TryGetValue("process", out strProcess);
+				
+				if(check_modeParameters(strMode) && !string.IsNullOrWhiteSpace(strProcess))
+				{
+					cmdProcess = strProcess;
+					
+//					if((modeType & cmdActionArgsModeType.NoGUI) != 0)
+//					{
+//						this.WindowState = FormWindowState.Minimized;
+//						timerCapture.Enabled = true;
+//					}
+				}
+			}
 			//	#####
 		}
 
 		void MainForm_Shown(object sender, EventArgs e)
 		{
+			if((modeType & cmdActionArgsModeType.NoGUI) != 0)
+			{
+//				this.WindowState = FormWindowState.Minimized;
+				timerCapture.Enabled = true;
+			}
 		}
 		#endregion
 		
@@ -106,15 +160,15 @@ namespace getScreenShot
         /// Prüfen und ermitteln welche Parameter der Anwendung übergeben wurden
         /// Parameter werden in einem Dictionary gespeichert
         /// </summary>
-		void check_cmdLineArgs()
+		bool check_cmdLineArgs()
 		{
-			string cmdProcess; 
+			
 			string cmdMode;
 			
             if (Environment.GetCommandLineArgs().Length > 0)
             {
                 cmdProcess = ParseCmdLineParam("process", Environment.CommandLine);
-                cmdMode = ParseCmdLineParam("version", Environment.CommandLine);
+                cmdMode = ParseCmdLineParam("mode", Environment.CommandLine);
 
                 if (!string.IsNullOrWhiteSpace(cmdProcess))
                 {
@@ -129,11 +183,10 @@ namespace getScreenShot
                 }
                 else
                     dicCmdArgs.Add("mode", string.Empty);
+                
+                return true;
             }
-//            else
-                //  Ausgabe der Hinweise zum Aufruf
-                //  Und Nutzung der Parameter
-//                printUsage();
+            return false;
 		}
 		
         /// <summary>
@@ -239,7 +292,7 @@ namespace getScreenShot
 		/// <param name="count"></param>
 		/// <param name="format"></param>
 		/// <returns></returns>
-		string checkFileName(int count, string suffix = "", int filetype = 0)
+		string checkFileName(int count, string suffix = "", int pid = 0, int filetype = 0)
 		{
 			string strDate = DateTime.Now.ToString("yyyy-MM-dd");
 			//	#### Verzeichnis zum speichern bei bedarf anlegen
@@ -253,14 +306,15 @@ namespace getScreenShot
 			//	####
 			
 			//	#### Dateinamen und vollen Pfad erzeugen
-			string FullFileName = string.Format("{0}\\{6}\\{1}_{2}_{3}_{4}.{5}",
+			string FullFileName = string.Format("{0}\\{6}\\{1}_{2}{7}_{3}_{4}.{5}",
 			                                    captureSavePath, 
 			                                    captureFileNamePrefix, 
 			                                    suffix == string.Empty ? "" : suffix,
 			                                    DateTime.Now.ToString("yyyyMMdd-HHmmss"), 
 			                                    count,
 			                                    filetype == 0 ? captureImageExt : captureFileLogExt,
-			                                    strDate
+			                                    strDate,
+			                                    pid > 0 ? "_"+pid : ""
 			                                   );
 			//	####
 			
@@ -293,26 +347,55 @@ namespace getScreenShot
             return string.Format(format[i], s);  
         }
 		
-		#endregion
-		
-		#region Events
-		void button1_Click(object sender, EventArgs e)
+		void getScreenshotFromProcess()
 		{
-			Process[] prz = Process.GetProcessesByName("JM4");
+			if (string.IsNullOrWhiteSpace(cmdProcess) && ((modeType & cmdActionArgsModeType.NoGUI) != 0)) {
+				//	Abruch wenn kein Process Name angegeben wurde und NoGui als Modus angegeben wurde
+				return;
+			}
+			
+			Process[] prz = Process.GetProcessesByName(cmdProcess);
+			IntPtr przHandle;
 			
 			if (prz.Length > 0) {
 				foreach (Process ps in prz) 
 				{
 					if (ps.MainWindowHandle != null) 
 					{	
-						SetForegroundWindow(ps.MainWindowHandle);
-						Thread.Sleep(300);
-						
-						ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName), ps.MainWindowHandle, ImageFormat.Png);
-						
-						saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName,1));
+						if(ActivateWindow(ps.MainWindowHandle, ps.Id, out przHandle))
+						{
+							Debug.WriteLine(string.Format("{0} / {1}", ps.MainWindowHandle, przHandle), "getScreenshotFromProcess()");
+							Thread.Sleep(1000);
+							
+							if (przHandle != IntPtr.Zero) {
+								
+								ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id)); //, przHandle, ImageFormat.Png);
+								saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id,1));
+							}
+							else
+							{
+								saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id, 1));
+								File.AppendAllText(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName,1), "Screenshot der Anwendung konnte nicht erstellt werden");
+							}
+						}
+						else
+						{
+							saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id, 1));
+							File.AppendAllText(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName,1), "Screenshot der Anwendung konnte nicht erstellt werden");
+						}
 					}
 				}
+			}
+		}
+		#endregion
+		
+		#region Events
+		void button1_Click(object sender, EventArgs e)
+		{
+			if (!string.IsNullOrWhiteSpace(textBox1.Text)) {
+				cmdProcess = textBox1.Text;
+				getScreenshotFromProcess();
+				modeType = cmdActionArgsModeType.GUI;
 			}
 		}
 		
@@ -357,6 +440,68 @@ namespace getScreenShot
 		    }
 		
 		    return commandLine.ToString();
+		}
+		void timerCapture_Tick(object sender, EventArgs e)
+		{
+			timerCapture.Enabled = false;
+			getScreenshotFromProcess();
+			if((modeType & cmdActionArgsModeType.NoGUI) != 0)
+				Application.Exit();
+			
+		}
+		
+		public bool ActivateWindow(IntPtr mainWindowHandle, int procID, out IntPtr newHandle)
+		{
+			uint iProcessID = 0;
+			IntPtr handle = IntPtr.Zero;
+			newHandle = IntPtr.Zero;
+			IntPtr fgHandle = IntPtr.Zero;
+			
+		    //check if already has focus
+		    if (mainWindowHandle == GetForegroundWindow()) 
+		    	return true;
+		
+		    //check if window is minimized
+		    if(SwitchToThisWindow(mainWindowHandle, true))
+		    	Debug.WriteLine("SwitchToThisWindow erfolgreich", "ActivateWindow()");
+		    else
+		    	Debug.WriteLine("SwitchToThisWindow nicht erfolgreich", "ActivateWindow()");
+//		    if (IsIconic(mainWindowHandle))
+//		    {
+//		        ShowWindow(mainWindowHandle, Restore);
+//		        ShowWindow(mainWindowHandle, 9);	//SW_SHOWNORMAL, Aktivieren und anzeigen. Fenster wiederherstellen wenn minimiert
+//		    }
+		    
+		    
+		
+		    // Simulate a key press
+		    keybd_event((byte)ALT, 0x45, EXTENDEDKEY | 0, 0);
+		
+		    //SetForegroundWindow(mainWindowHandle);
+		
+		    // Simulate a key release
+		    keybd_event((byte)ALT, 0x45, EXTENDEDKEY | KEYUP, 0);
+		
+		    fgHandle = SetActiveWindow(mainWindowHandle);
+		    SetForegroundWindow(mainWindowHandle);
+		    
+		    Thread.Sleep(500);
+		    
+		    handle = GetForegroundWindow();
+		    
+		    GetWindowThreadProcessId(handle, out iProcessID);
+		    
+		    Debug.WriteLine(string.Format("{0} / {1} / {2}", mainWindowHandle, handle, fgHandle), "ActivateWindow()");
+		    
+		    if (iProcessID == procID)
+		    {
+		    	newHandle = handle;
+//		    	 ShowWindow(handle, 9);
+		    	return true;
+		    }
+		    
+		    
+		    return false;
 		}
 
         #endregion
