@@ -25,14 +25,21 @@ namespace getScreenShot {
           [DllImport("user32.dll")]
           private static extern IntPtr GetWindowRect(IntPtr hWnd, ref Rect rect);
 
-          [StructLayout(LayoutKind.Sequential)]
-          private struct Rect {
-                public int Left;
-                public int Top;
-                public int Right;
-                public int Bottom;
-          }
-
+//          [StructLayout(LayoutKind.Sequential)]
+//          private struct Rect {
+//                public int Left;
+//                public int Top;
+//                public int Right;
+//                public int Bottom;
+//          }
+			[StructLayout(LayoutKind.Explicit)]
+			public struct Rect 
+			{
+			   [FieldOffset(0)] public int Left;
+			   [FieldOffset(4)] public int Top;
+			   [FieldOffset(8)] public int Right;
+			   [FieldOffset(12)] public int Bottom;
+			}
           [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
           public static extern IntPtr GetDesktopWindow();
 
@@ -87,13 +94,21 @@ namespace getScreenShot {
           public static Bitmap Capture(IntPtr handle) {
                 Rectangle bounds;
                 var rect = new Rect();
-                GetWindowRect(handle, ref rect);
-                bounds = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
-                CursorPosition = new Point(Cursor.Position.X - rect.Left, Cursor.Position.Y - rect.Top);
-
-                var result = new Bitmap(bounds.Width, bounds.Height);
-                using (var g = Graphics.FromImage(result))
-                     g.CopyFromScreen(new Point(bounds.Left, bounds.Top), Point.Empty, bounds.Size);
+                var result = new Bitmap(1,1);
+                
+                try {
+	                GetWindowRect(handle, ref rect);
+	                bounds = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+	                CursorPosition = new Point(Cursor.Position.X - rect.Left, Cursor.Position.Y - rect.Top);
+	
+	                
+	                result = new Bitmap(bounds.Width, bounds.Height);
+	                using (var g = Graphics.FromImage(result))
+	                     g.CopyFromScreen(new Point(bounds.Left, bounds.Top), Point.Empty, bounds.Size);
+                	
+                } catch (Exception) {
+                	
+                }
 
                 return result;
           }
