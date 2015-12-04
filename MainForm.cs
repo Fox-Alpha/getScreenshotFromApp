@@ -77,7 +77,8 @@ namespace getScreenShot
 			APP,
 			FULL,
 			GUI,
-			NoGUI
+			NoGUI,
+			logOnly
 		}
 
 		int status = (int) nagiosStatus.Ok;
@@ -367,6 +368,7 @@ namespace getScreenShot
 							Debug.WriteLine(string.Format("{0} / {1}", ps.MainWindowHandle, przHandle), "getScreenshotFromProcess()");
 							Thread.Sleep(1000);
 							
+							//if((modeType & cmdActionArgsModeType.logOnly) == 0)
 							if (przHandle != IntPtr.Zero) {
 								
 								ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id)); //, przHandle, ImageFormat.Png);
@@ -395,6 +397,7 @@ namespace getScreenShot
 			if (!string.IsNullOrWhiteSpace(textBox1.Text)) {
 				cmdProcess = textBox1.Text;
 				getScreenshotFromProcess();
+				
 				modeType = cmdActionArgsModeType.GUI;
 			}
 		}
@@ -502,6 +505,18 @@ namespace getScreenShot
 		    
 		    
 		    return false;
+		}
+		
+		void textBox1_KeyUp(object sender, KeyEventArgs e)
+		{
+			if (e.KeyCode == Keys.Enter) {
+				button1.PerformClick();
+			}
+		}
+		void checkBox1_CheckedChanged(object sender, EventArgs e)
+		{
+			
+			modeType = checkBox1.Checked ? modeType | cmdActionArgsModeType.logOnly : modeType & cmdActionArgsModeType.logOnly;
 		}
 
         #endregion
