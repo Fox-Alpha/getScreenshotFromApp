@@ -368,10 +368,13 @@ namespace getScreenShot
 							Debug.WriteLine(string.Format("{0} / {1}", ps.MainWindowHandle, przHandle), "getScreenshotFromProcess()");
 							Thread.Sleep(1000);
 							
-							//if((modeType & cmdActionArgsModeType.logOnly) == 0)
-							if (przHandle != IntPtr.Zero) {
-								
-								ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id)); //, przHandle, ImageFormat.Png);
+							//	Mindestens ein Prozess wurde gefunden
+							if (przHandle != IntPtr.Zero) 
+							{
+								if((modeType & cmdActionArgsModeType.logOnly) == 0)
+								{
+									ScreenCapturer.CaptureAndSave(checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id)); //, przHandle, ImageFormat.Png);
+								}
 								saveProcessInfo2File(ps, checkFileName(Array.IndexOf(prz, ps)+1, ps.ProcessName, ps.Id,1));
 							}
 							else
